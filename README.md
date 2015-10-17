@@ -1,8 +1,8 @@
 # http-fs-node
-| A node module to manage a remote filesystem via http
+> A node module to manage a remote filesystem via http
 
-| This is a super early stage work in progress (not even using semver yet).
-| Check back in a few months and hopefully we'll have a working version!
+> This is a super early stage work in progress (not even using semver yet).
+Check back in a few months and hopefully we'll have a working version!
 
 This module is a stateless node implementation of the server-side component of the Brinkbit [http-fs-api](https://github.com/Brinkbit/http-fs-api).
 
