@@ -23,7 +23,7 @@ const search = R.curry(( dataStore, GUID, data ) => {
         GUID,
         data.parameters.query,
         data.parameters.sort || null,
-        getFlags( data ),
+        getFlags( data )
     );
 });
 
@@ -37,15 +37,15 @@ const download = R.curry(( dataStore, GUID ) =>
 );
 
 const create = R.curry(( dataStore, GUID, data ) => {
-    if ( !data ||
-        ( data.type !== 'file' && data.type !== 'folder' ) ||
-        !data.name ||
-        ( data.type === 'folder' && data.content )
+    const params = data.parameters;
+    if ( !params ||
+        ( params.type !== 'file' && params.type !== 'folder' ) ||
+        !params.name ||
+        ( params.type === 'folder' && params.content )
     ) {
         return Promise.reject( 'INVALID_PARAMETERS' );
     }
-    const content = data.content || null;
-    return dataStore.create( GUID, data.type, data.name, content, getFlags( data ));
+    return dataStore.create( GUID, params.type, params.name, params.content, getFlags( data ));
 });
 
 const bulk = R.curry(( dataStore, GUID, data ) => {
@@ -85,13 +85,14 @@ const rename = R.curry(( dataStore, GUID, data ) => {
 
 const destroy = R.curry(( dataStore, GUID ) => dataStore.destroy( GUID ));
 
-const takeAction = R.curry(( permissions, userId, methods, GUID, data ) => {
+const takeAction = R.curry(( permissions, methods, GUID, userId, data ) => {
     if ( !GUID ) {
-        return Promise.reject( utils.errorResponse( 'RESOURCE_NOT_FOUND' ));
+        return Promise.reject( utils.errorResponse( 'INVALID_RESOURCE' ));
     }
 
     if ( !data || !data.action ) {
-        return methods.default( GUID, data );
+        return methods.default( GUID, data )
+        .catch( err => Promise.reject( utils.errorResponse( err )));
     }
 
     if ( !methods.hasOwnProperty( data.action )) {
@@ -108,7 +109,6 @@ const takeAction = R.curry(( permissions, userId, methods, GUID, data ) => {
 module.exports = configuration => {
     const dataStore = configuration.dataStore;
     const permissions = configuration.permissions;
-    const userId = configuration.userId;
 
     const GET = {
         default: read( dataStore ),
@@ -134,10 +134,11 @@ module.exports = configuration => {
     };
 
     const DELETE = {
+        default: destroy( dataStore ),
         destroy: destroy( dataStore ),
     };
 
-    const method = takeAction( permissions, userId );
+    const method = takeAction( permissions );
 
     const res = {};
     res.GET = method( GET );

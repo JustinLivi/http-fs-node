@@ -1,6 +1,9 @@
 'use strict';
 
 // TODO: remove this file when fs-s3-mongo is ingested
+function stub() {
+    return Promise.resolve( 'NOT_IMPLEMENTED' );
+}
 
 module.exports.read = stub;
 module.exports.alias = stub;
@@ -14,7 +17,3 @@ module.exports.update = stub;
 module.exports.move = stub;
 module.exports.rename = stub;
 module.exports.destroy = stub;
-
-function stub() {
-    return Promise.resolve( 'NOT_IMPLEMENTED' );
-}
