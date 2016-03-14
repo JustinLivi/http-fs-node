@@ -9,7 +9,6 @@ const errObject = {
     'INVALID_RESOUCE_TYPE': { status: 415, message: 'Invalid resource type.' },
     'INVALID_ACTION': { status: 501, message: 'Invalid action.' },
     'INVALID_PARAMETERS': { status: 501, message: 'Invalid parameters.' },
-
     'DEFAULT_SERVER_ERROR': { status: 500, message: 'Internal Server Error. Please try again later.' },
 };
 

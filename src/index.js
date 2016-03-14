@@ -1,132 +1,150 @@
 'use strict';
 
 const utils = require( './utils.js' );
-const getModule = require( './get.js' );
-const postModule = require( './post.js' );
-const putModule = require( './put.js' );
-const deleteModule = require( './delete.js' );
+const R = require( 'ramda' ); // eslint-disable-line id-length
 
-module.exports.handleRequest = function handleRequest( type, fullPath, data ) {
-    // TODO: standardize flags, if they were passed in
+function getFlags( data ) {
+    return ( data && data.parameters && data.parameters.flags ) ? data.parameters.flags : [];
+}
 
-    if ( !fullPath || fullPath === '' ) {
-        return Promise.reject( utils.errorResponse( 'INVALID_PATH_OR_RESOURCE' ));
+const alias = R.curry(( dataStore, GUID, data ) =>
+    dataStore.alias( GUID, data )
+);
+
+const read = R.curry(( dataStore, GUID, data ) =>
+    dataStore.read( GUID, getFlags( data ))
+);
+
+const search = R.curry(( dataStore, GUID, data ) => {
+    if ( !data.parameters || !data.parameters.query ) {
+        return Promise.reject( 'INVALID_PARAMETERS' );
+    }
+    return dataStore.search(
+        GUID,
+        data.parameters.query,
+        data.parameters.sort || null,
+        getFlags( data ),
+    );
+});
+
+const inspect = R.curry(( dataStore, GUID, data ) => {
+    const fields = ( data.parameters && data.parameters.fields ) ? data.parameters.fields : null;
+    return dataStore.inspect( GUID, fields );
+});
+
+const download = R.curry(( dataStore, GUID ) =>
+    dataStore.download( GUID, 'zip' )
+);
+
+const create = R.curry(( dataStore, GUID, data ) => {
+    if ( !data ||
+        ( data.type !== 'file' && data.type !== 'folder' ) ||
+        !data.name ||
+        ( data.type === 'folder' && data.content )
+    ) {
+        return Promise.reject( 'INVALID_PARAMETERS' );
+    }
+    const content = data.content || null;
+    return dataStore.create( GUID, data.type, data.name, content, getFlags( data ));
+});
+
+const bulk = R.curry(( dataStore, GUID, data ) => {
+    if ( !data.parameters || !data.parameters.resources ) {
+        return Promise.reject( 'INVALID_PARAMETERS' );
+    }
+    return dataStore.bulk( GUID, data.parameters.resources, getFlags( data ));
+});
+
+const copy = R.curry(( dataStore, GUID, data ) => {
+    if ( !data.parameters || !data.parameters.destination ) {
+        return Promise.reject( 'INVALID_PARAMETERS' );
+    }
+    return dataStore.copy( GUID, data.parameters.destination, getFlags( data ));
+});
+
+const update = R.curry(( dataStore, GUID, data ) => {
+    if ( !data.parameters || !data.parameters.content ) {
+        return Promise.reject( 'INVALID_PARAMETERS' );
+    }
+    return dataStore.update( GUID, data.parameters.content, getFlags( data ));
+});
+
+const move = R.curry(( dataStore, GUID, data ) => {
+    if ( !data.parameters || !data.parameters.destination ) {
+        return Promise.reject( 'INVALID_PARAMETERS' );
+    }
+    return dataStore.move( GUID, data.parameters.destination, getFlags( data ));
+});
+
+const rename = R.curry(( dataStore, GUID, data ) => {
+    if ( !data.parameters || !data.parameters.name ) {
+        return Promise.reject( 'INVALID_PARAMETERS' );
+    }
+    return dataStore.rename( GUID, data.parameters.name, getFlags( data ));
+});
+
+const destroy = R.curry(( dataStore, GUID ) => dataStore.destroy( GUID ));
+
+const takeAction = R.curry(( permissions, userId, methods, GUID, data ) => {
+    if ( !GUID ) {
+        return Promise.reject( utils.errorResponse( 'RESOURCE_NOT_FOUND' ));
     }
 
-    //----------------------------------
-    // GET modules
-    //----------------------------------
-
-    // Required parameters: NONE
-    // Optional parameters: NONE
-    if ( type === 'GET' && ( !data || !data.action || data.action === 'read' )) {
-        return getModule.read( fullPath );
+    if ( !data || !data.action ) {
+        return methods.default( GUID, data );
     }
 
-    // Required parameters: query (string)
-    // Optional parameters: sorting (string)
-    else if ( type === 'GET' && data.action === 'search' ) {
-        if ( !data.parameters || !data.parameters.query ) {
-            return Promise.reject( utils.errorResponse( 'INVALID_PARAMETERS' ));
-        }
-
-        return getModule.search( fullPath, data );
+    if ( !methods.hasOwnProperty( data.action )) {
+        return Promise.reject( utils.errorResponse( 'INVALID_ACTION' ));
     }
 
-    // Required parameters: NONE
-    // Optional parameters: fields (array of strings)
-    else if ( type === 'GET' && data.action === 'inspect' ) {
-        return getModule.inspect( fullPath, data );
-    }
+    return Promise.resolve()
+    .then(( ) => permissions.verify( GUID, userId, data.action ))
+    .then(() => methods[ data.action ]( GUID, data ))
+    .catch( err => Promise.reject( utils.errorResponse( err )));
+});
 
-    // Required parameters: NONE
-    // Optional parameters: NONE
-    else if ( type === 'GET' && data.action === 'download' ) {
-        return getModule.download( fullPath );
-    }
 
-    //----------------------------------
-    // POST modules
-    //----------------------------------
+module.exports = configuration => {
+    const dataStore = configuration.dataStore;
+    const permissions = configuration.permissions;
+    const userId = configuration.userId;
 
-    // Required parameters: content (multi-part form upload)
-    // Optional parameters: NONE
-    else if ( type === 'POST' && ( !data || !data.action || data.action === 'create' )) {
-        if ( !data.parameters || !data.parameters.content ) {
-            return Promise.reject( utils.errorResponse( 'INVALID_PARAMETERS' ));
-        }
+    const GET = {
+        default: read( dataStore ),
+        read: read( dataStore ),
+        alias: alias( dataStore ),
+        search: search( dataStore ),
+        inspect: inspect( dataStore ),
+        download: download( dataStore ),
+    };
 
-        return postModule.create( fullPath, data );
-    }
+    const POST = {
+        default: create( dataStore ),
+        create: create( dataStore ),
+        bulk: bulk( dataStore ),
+        copy: copy( dataStore ),
+    };
 
-    // TODO: better validation on resource formatting
-    // Required parameters: resources (object, e.g., {resourceName: content }
-    // Optional parameters: NONE
-    else if ( type === 'POST' && data.action === 'bulk' ) {
-        if ( !data.parameters || !data.parameters.resources ) {
-            return Promise.reject( utils.errorResponse( 'INVALID_PARAMETERS' ));
-        }
+    const PUT = {
+        default: update( dataStore ),
+        update: update( dataStore ),
+        move: move( dataStore ),
+        rename: rename( dataStore ),
+    };
 
-        return postModule.bulk( fullPath, data );
-    }
+    const DELETE = {
+        destroy: destroy( dataStore ),
+    };
 
-    // Required parameters: destination (string)
-    // Optional parameters: NONE
-    else if ( type === 'POST' && data.action === 'copy' ) {
-        if ( !data.parameters || !data.parameters.destination ) {
-            return Promise.reject( utils.errorResponse( 'INVALID_PARAMETERS' ));
-        }
+    const method = takeAction( permissions, userId );
 
-        return postModule.copy( fullPath, data );
-    }
+    const res = {};
+    res.GET = method( GET );
+    res.POST = method( POST );
+    res.PUT = method( PUT );
+    res.DELETE = method( DELETE );
+    res.actions = { GET, POST, PUT, DELETE };
 
-    //----------------------------------
-    // PUT modules
-    //----------------------------------
-
-    // Required parameters: content (multi-part form upload)
-    // Optional parameters: NONE
-    else if ( type === 'PUT' && ( !data || !data.action || data.action === 'update' )) {
-        if ( !data.parameters || !data.parameters.content ) {
-            return Promise.reject( utils.errorResponse( 'INVALID_PARAMETERS' ));
-        }
-
-        return putModule.update( fullPath, data );
-    }
-
-    // Required parameters: content (multi-part form upload)
-    // Optional parameters: NONE
-    else if ( type === 'PUT' && data.action === 'move' ) {
-        if ( !data.parameters || !data.parameters.destination ) {
-            return Promise.reject( utils.errorResponse( 'INVALID_PARAMETERS' ));
-        }
-
-        return putModule.move( fullPath, data );
-    }
-
-    // Required parameters: name (string)
-    // Optional parameters: NONE
-    else if ( type === 'PUT' && data.action === 'rename' ) {
-        if ( !data.parameters || !data.parameters.name ) {
-            return Promise.reject( utils.errorResponse( 'INVALID_PARAMETERS' ));
-        }
-
-        return putModule.rename( fullPath, data );
-    }
-
-    //----------------------------------
-    // DELETE module
-    //----------------------------------
-
-    // Required parameters: NONE
-    // Optional parameters: NONE
-    else if ( type === 'DELETE' && ( !data || !data.action || data.action === 'delete' )) {
-        return deleteModule.destroy( fullPath );
-    }
-
-    //----------------------------------
-    // Invalid action
-    //----------------------------------
-
-    return Promise.reject( utils.errorResponse( 'INVALID_ACTION' ));
+    return res;
 };
