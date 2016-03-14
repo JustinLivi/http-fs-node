@@ -7,91 +7,90 @@ function getFlags( data ) {
     return ( data && data.parameters && data.parameters.flags ) ? data.parameters.flags : [];
 }
 
-const alias = R.curry(( dataStore, GUID, data ) =>
-    dataStore.alias( GUID, data )
+const alias = R.curry(( dataStore, resource, data ) =>
+    dataStore.alias( resource, data )
 );
 
-const read = R.curry(( dataStore, GUID, data ) =>
-    dataStore.read( GUID, getFlags( data ))
+const read = R.curry(( dataStore, resource, data ) =>
+    dataStore.read( resource, getFlags( data ))
 );
 
-const search = R.curry(( dataStore, GUID, data ) => {
+const search = R.curry(( dataStore, resource, data ) => {
     if ( !data.parameters || !data.parameters.query ) {
         return Promise.reject( 'INVALID_PARAMETERS' );
     }
     return dataStore.search(
-        GUID,
+        resource,
         data.parameters.query,
         data.parameters.sort || null,
         getFlags( data )
     );
 });
 
-const inspect = R.curry(( dataStore, GUID, data ) => {
+const inspect = R.curry(( dataStore, resource, data ) => {
     const fields = ( data.parameters && data.parameters.fields ) ? data.parameters.fields : null;
-    return dataStore.inspect( GUID, fields );
+    return dataStore.inspect( resource, fields );
 });
 
-const download = R.curry(( dataStore, GUID ) =>
-    dataStore.download( GUID, 'zip' )
+const download = R.curry(( dataStore, resource ) =>
+    dataStore.download( resource, 'zip' )
 );
 
-const create = R.curry(( dataStore, GUID, data ) => {
+const create = R.curry(( dataStore, resource, data ) => {
     const params = data.parameters;
     if ( !params ||
-        ( params.type !== 'file' && params.type !== 'folder' ) ||
         !params.name ||
-        ( params.type === 'folder' && params.content )
+        ( params.mimetype === 'folder' && params.content )
     ) {
         return Promise.reject( 'INVALID_PARAMETERS' );
     }
-    return dataStore.create( GUID, params.type, params.name, params.content, getFlags( data ));
+    return dataStore.create( resource, params.type, params.name, params.content, getFlags( data ));
 });
 
-const bulk = R.curry(( dataStore, GUID, data ) => {
+const bulk = R.curry(( dataStore, resource, data ) => {
     if ( !data.parameters || !data.parameters.resources ) {
         return Promise.reject( 'INVALID_PARAMETERS' );
     }
-    return dataStore.bulk( GUID, data.parameters.resources, getFlags( data ));
+    return dataStore.bulk( resource, data.parameters.resources, getFlags( data ));
 });
 
-const copy = R.curry(( dataStore, GUID, data ) => {
+const copy = R.curry(( dataStore, resource, data ) => {
     if ( !data.parameters || !data.parameters.destination ) {
         return Promise.reject( 'INVALID_PARAMETERS' );
     }
-    return dataStore.copy( GUID, data.parameters.destination, getFlags( data ));
+    return dataStore.copy( resource, data.parameters.destination, getFlags( data ));
 });
 
-const update = R.curry(( dataStore, GUID, data ) => {
+const update = R.curry(( dataStore, resource, data ) => {
     if ( !data.parameters || !data.parameters.content ) {
         return Promise.reject( 'INVALID_PARAMETERS' );
     }
-    return dataStore.update( GUID, data.parameters.content, getFlags( data ));
+    return dataStore.update( resource, data.parameters.content, getFlags( data ));
 });
 
-const move = R.curry(( dataStore, GUID, data ) => {
+const move = R.curry(( dataStore, resource, data ) => {
     if ( !data.parameters || !data.parameters.destination ) {
         return Promise.reject( 'INVALID_PARAMETERS' );
     }
-    return dataStore.move( GUID, data.parameters.destination, getFlags( data ));
+    return dataStore.move( resource, data.parameters.destination, getFlags( data ));
 });
 
-const rename = R.curry(( dataStore, GUID, data ) => {
+const rename = R.curry(( dataStore, resource, data ) => {
     if ( !data.parameters || !data.parameters.name ) {
         return Promise.reject( 'INVALID_PARAMETERS' );
     }
-    return dataStore.rename( GUID, data.parameters.name, getFlags( data ));
+    return dataStore.rename( resource, data.parameters.name, getFlags( data ));
 });
 
-const destroy = R.curry(( dataStore, GUID ) => dataStore.destroy( GUID ));
+const destroy = R.curry(( dataStore, resource ) => dataStore.destroy( resource ));
 
-const takeAction = R.curry(( permissions, methods, GUID, userId, data ) => {
-    if ( !GUID ) {
+const takeAction = R.curry(( permissions, methods, resource, userId, data ) => {
+    if ( !resource ) {
         return Promise.reject( utils.errorResponse( 'INVALID_RESOURCE' ));
     }
 
     if ( !data || !data.action ) {
-        return methods.default( GUID, data )
+        return methods.default( resource, data )
         .catch( err => Promise.reject( utils.errorResponse( err )));
     }
 
@@ -100,8 +99,8 @@ const takeAction = R.curry(( permissions, methods, GUID, userId, data ) => {
     }
 
     return Promise.resolve()
-    .then(( ) => permissions.verify( GUID, userId, data.action ))
-    .then(() => methods[ data.action ]( GUID, data ))
+    .then(( ) => permissions.verify( resource, userId, data.action ))
+    .then(() => methods[ data.action ]( resource, data ))
     .catch( err => Promise.reject( utils.errorResponse( err )));
 });
 
@@ -145,7 +144,18 @@ module.exports = configuration => {
     res.POST = method( POST );
     res.PUT = method( PUT );
     res.DELETE = method( DELETE );
-    res.actions = { GET, POST, PUT, DELETE };
+    res.read = GET.read;
+    res.alias = GET.alias;
+    res.search = GET.search;
+    res.inspect = GET.inspect;
+    res.download = GET.download;
+    res.create = POST.create;
+    res.bulk = POST.bulk;
+    res.copy = POST.copy;
+    res.update = PUT.update;
+    res.move = PUT.move;
+    res.rename = PUT.rename;
+    res.destroy = PUT.destroy;
 
     return res;
 };
